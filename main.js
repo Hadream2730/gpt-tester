@@ -193,6 +193,7 @@ $(function () {
 
   $('#submit-button').click((async function () {
         console.log('Submit is clicked')
+        $('#submit-button').prop('disabled', true);
         await fetch("https://gpt-test-backend.onrender.com/chat", {
             method: "POST",
             headers: {
@@ -208,7 +209,8 @@ $(function () {
         .then(res => res.json())
         .then(data => {
             let result = data.content[0].content[0].text;
-            display_result_output(result)
+            display_result_output(result);
+            $('#submit-button').prop('disabled', false);
         });
     }))
 });
