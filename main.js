@@ -1,6 +1,8 @@
 $(function () {
     var gpt_4_1_item = null;
     var gpt_5_1_item = null;
+    var chatHistory = []; // Store chat messages
+    var currentSystemInstruction = '';
     $('#problem-number').val('1523');
 
     function displayAll() {
@@ -169,17 +171,28 @@ $(function () {
   }
 
   
-  function display_result_output(text) {
-    let outputDiv = document.getElementById('result-display');
-    outputDiv.innerHTML = text;
+  function addChatMessage(role, content) {
+    const chatMessages = document.getElementById('chat-messages');
     
-    // Add the text to be rendered
-    // const textNode = document.createTextNode(text);
-    // outputDiv.appendChild(textNode);
+    // Remove welcome message if it exists
+    const welcome = chatMessages.querySelector('.chat-welcome');
+    if (welcome) {
+      welcome.remove();
+    }
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${role}`;
     
-    // Render the KaTeX
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    contentDiv.innerHTML = content;
+    
+    messageDiv.appendChild(contentDiv);
+    chatMessages.appendChild(messageDiv);
+    
+    // Render KaTeX in the new message
     try {
-        renderMathInElement(outputDiv, {
+        renderMathInElement(contentDiv, {
             delimiters: [
                 {left: "$$", right: "$$", display: true},
                 {left: "$", right: "$", display: false},
@@ -195,8 +208,49 @@ $(function () {
             strict: false
         });
     } catch (error) {
-        outputDiv.innerHTML = '<div style="color: red;">Error rendering KaTeX: ' + error.message + '</div>';
+        contentDiv.innerHTML = '<div style="color: red;">Error rendering KaTeX: ' + error.message + '</div>';
     }
+    
+    // Scroll to bottom
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // Add to chat history
+    chatHistory.push({ role, content });
+  }
+
+  function showLoadingMessage() {
+    const chatMessages = document.getElementById('chat-messages');
+    const welcome = chatMessages.querySelector('.chat-welcome');
+    if (welcome) {
+      welcome.remove();
+    }
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'chat-message assistant';
+    messageDiv.id = 'loading-message';
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    contentDiv.innerHTML = '<div class="loading-indicator"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div></div>';
+    
+    messageDiv.appendChild(contentDiv);
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function removeLoadingMessage() {
+    const loadingMsg = document.getElementById('loading-message');
+    if (loadingMsg) {
+      loadingMsg.remove();
+    }
+  }
+
+  function clearChat() {
+    chatHistory = [];
+    const chatMessages = document.getElementById('chat-messages');
+    chatMessages.innerHTML = '<div class="chat-welcome"><p>👋 Start a conversation! Submit the problem first, then ask questions about the result.</p></div>';
+    $('#chat-input').val('');
+    $('#send-chat-button').prop('disabled', true);
   }
   
   function display_model2_output() {
@@ -229,26 +283,135 @@ $(function () {
     }
   }
 
-  $('#submit-button').click((async function () {
-        console.log('Submit is clicked')
-        $('#submit-button').prop('disabled', true);
-        await fetch("https://gpt-test-backend.onrender.com/chat", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                system: $('#system-instruction').val(),
-                messages: [
-                { role: "user", content: gpt_4_1_item.problem }
-                ]
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            let result = data.content[0].content[0].text;
-            display_result_output(result);
-            $('#submit-button').prop('disabled', false);
-        });
-    }))
+  $('#submit-button').click(async function () {
+        if (!gpt_4_1_item) {
+            alert('Please display a problem first!');
+            return;
+        }
+
+        console.log('Submit is clicked');
+        const submitBtn = $('#submit-button');
+        const btnText = submitBtn.find('.btn-text');
+        const btnLoader = submitBtn.find('.btn-loader');
+        
+        submitBtn.prop('disabled', true);
+        btnText.hide();
+        btnLoader.show();
+
+        // Clear previous chat and start fresh
+        clearChat();
+        currentSystemInstruction = $('#system-instruction').val();
+        
+        // Add user message (the problem)
+        addChatMessage('user', gpt_4_1_item.problem);
+        showLoadingMessage();
+
+        try {
+            const response = await fetch("https://gpt-test-backend.onrender.com/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    system: currentSystemInstruction,
+                    messages: [
+                        { role: "user", content: gpt_4_1_item.problem }
+                    ]
+                })
+            });
+
+            const data = await response.json();
+            removeLoadingMessage();
+            
+            if (data.error) {
+                addChatMessage('assistant', `<p style="color: red;">Error: ${data.message || 'Unknown error occurred'}</p>`);
+            } else {
+                let result = data.content[0].content[0].text;
+                addChatMessage('assistant', result);
+            }
+        } catch (error) {
+            removeLoadingMessage();
+            addChatMessage('assistant', `<p style="color: red;">Error: ${error.message}</p>`);
+        } finally {
+            submitBtn.prop('disabled', false);
+            btnText.show();
+            btnLoader.hide();
+        }
+    });
+
+    // Chat input functionality
+    $('#send-chat-button').click(async function () {
+        await sendChatMessage();
+    });
+
+    $('#chat-input').on('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage();
+        }
+    });
+
+    $('#chat-input').on('input', function() {
+        const hasText = $(this).val().trim().length > 0;
+        const hasHistory = chatHistory.length > 0;
+        $('#send-chat-button').prop('disabled', !hasText || !hasHistory);
+    });
+
+    async function sendChatMessage() {
+        const chatInput = $('#chat-input');
+        const message = chatInput.val().trim();
+        
+        if (!message || chatHistory.length === 0) {
+            return;
+        }
+
+        // Disable input while sending
+        chatInput.prop('disabled', true);
+        $('#send-chat-button').prop('disabled', true);
+
+        // Add user message
+        addChatMessage('user', message);
+        chatInput.val('');
+        showLoadingMessage();
+
+        // Build messages array for API
+        const apiMessages = chatHistory.map(msg => ({
+            role: msg.role,
+            content: msg.content
+        }));
+
+        try {
+            const response = await fetch("https://gpt-test-backend.onrender.com/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    system: currentSystemInstruction,
+                    messages: apiMessages
+                })
+            });
+
+            const data = await response.json();
+            removeLoadingMessage();
+            
+            if (data.error) {
+                addChatMessage('assistant', `<p style="color: red;">Error: ${data.message || 'Unknown error occurred'}</p>`);
+            } else {
+                let result = data.content[0].content[0].text;
+                addChatMessage('assistant', result);
+            }
+        } catch (error) {
+            removeLoadingMessage();
+            addChatMessage('assistant', `<p style="color: red;">Error: ${error.message}</p>`);
+        } finally {
+            chatInput.prop('disabled', false);
+            chatInput.focus();
+        }
+    }
+
+    // Clear chat button
+    $('#clear-chat-button').click(function() {
+        clearChat();
+    });
 });
