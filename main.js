@@ -6,6 +6,68 @@ $(function () {
     var currentConversationId = null; // Store conversation_id for stateful conversations
     $('#problem-number').val('1523');
 
+    // Helper function to protect LaTeX before markdown processing
+    function protectLatex(text) {
+      if (!text) return { text: '', latexBlocks: [] };
+      
+      const latexBlocks = [];
+      let counter = 0;
+      
+      // Protect $$ blocks first (display math)
+      text = text.replace(/\$\$([\s\S]*?)\$\$/g, (match) => {
+        const placeholder = `__LATEX_DISPLAY_${counter}_PLACEHOLDER__`;
+        latexBlocks.push({ content: match });
+        counter++;
+        return placeholder;
+      });
+      
+      // Protect \[ \] blocks (display math)
+      text = text.replace(/\\\[([\s\S]*?)\\\]/g, (match) => {
+        const placeholder = `__LATEX_DISPLAY_${counter}_PLACEHOLDER__`;
+        latexBlocks.push({ content: match });
+        counter++;
+        return placeholder;
+      });
+      
+      // Protect \( \) blocks (inline math)
+      text = text.replace(/\\\(([\s\S]*?)\\\)/g, (match) => {
+        const placeholder = `__LATEX_INLINE_${counter}_PLACEHOLDER__`;
+        latexBlocks.push({ content: match });
+        counter++;
+        return placeholder;
+      });
+      
+      // Protect $ blocks (inline math) - must be last, after $$ is protected
+      text = text.replace(/\$([^\$\n]+?)\$/g, (match) => {
+        if (match.includes('__LATEX_')) return match;
+        const placeholder = `__LATEX_INLINE_${counter}_PLACEHOLDER__`;
+        latexBlocks.push({ content: match });
+        counter++;
+        return placeholder;
+      });
+      
+      return { text, latexBlocks };
+    }
+    
+    // Helper function to restore LaTeX after markdown processing
+    function restoreLatex(html, latexBlocks) {
+      if (!html || !latexBlocks || latexBlocks.length === 0) return html;
+      let result = html;
+      latexBlocks.forEach((block, index) => {
+        // Try both with and without underscores (marked.js might preserve them differently than markdown-it)
+        const displayPatterns = [`LATEX_DISPLAY_${index}_PLACEHOLDER__`, `LATEX_DISPLAY_${index}_PLACEHOLDER`];
+        const inlinePatterns = [`__LATEX_INLINE_${index}_PLACEHOLDER__`, `LATEX_INLINE_${index}_PLACEHOLDER`];
+        
+        displayPatterns.forEach(pattern => {
+          result = result.replace(new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), block.content);
+        });
+        inlinePatterns.forEach(pattern => {
+          result = result.replace(new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), block.content);
+        });
+      });
+      return result;
+    }
+
     function displayAll() {
         const problem_number = $('#problem-number').val();
         console.log('Problem Number:', problem_number);
@@ -81,11 +143,9 @@ $(function () {
   }
   function display_problem() {
     let outputDiv = document.getElementById('problem-display');
-    outputDiv.innerHTML = gpt_4_1_item.problem;
-    
-    // Add the text to be rendered
-    // const textNode = document.createTextNode(text);
-    // outputDiv.appendChild(textNode);
+    const { text: protectedText, latexBlocks } = protectLatex(gpt_4_1_item.problem);
+    const markdownHtml = typeof marked !== 'undefined' ? marked.parse(protectedText) : protectedText;
+    outputDiv.innerHTML = restoreLatex(markdownHtml, latexBlocks);
     
     // Render the KaTeX
     try {
@@ -112,11 +172,9 @@ $(function () {
   
   function display_solution() {
     let outputDiv = document.getElementById('solution-display');
-    outputDiv.innerHTML = gpt_4_1_item.solution;
-    
-    // Add the text to be rendered
-    // const textNode = document.createTextNode(text);
-    // outputDiv.appendChild(textNode);
+    const { text: protectedText, latexBlocks } = protectLatex(gpt_4_1_item.solution);
+    const markdownHtml = typeof marked !== 'undefined' ? marked.parse(protectedText) : protectedText;
+    outputDiv.innerHTML = restoreLatex(markdownHtml, latexBlocks);
     
     // Render the KaTeX
     try {
@@ -143,11 +201,12 @@ $(function () {
   
   function display_answer() {
     let outputDiv = document.getElementById('answer-display');
-    outputDiv.innerHTML = "$" + gpt_4_1_item.answers + "$";
-    
-    // Add the text to be rendered
-    // const textNode = document.createTextNode(text);
-    // outputDiv.appendChild(textNode);
+    // Answer is already wrapped in $ delimiters, so protect it
+    const answerText = "$" + gpt_4_1_item.answers + "$";
+    const { text: protectedText, latexBlocks } = protectLatex(answerText);
+    // Answer might not need markdown, but apply it anyway for consistency
+    const markdownHtml = typeof marked !== 'undefined' ? marked.parse(protectedText) : protectedText;
+    outputDiv.innerHTML = restoreLatex(markdownHtml, latexBlocks);
     
     // Render the KaTeX
     try {
@@ -186,7 +245,11 @@ $(function () {
     
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
-    contentDiv.innerHTML = content;
+    
+    // Process markdown and LaTeX
+    const { text: protectedText, latexBlocks } = protectLatex(content);
+    const markdownHtml = typeof marked !== 'undefined' ? marked.parse(protectedText) : protectedText;
+    contentDiv.innerHTML = restoreLatex(markdownHtml, latexBlocks);
     
     messageDiv.appendChild(contentDiv);
     chatMessages.appendChild(messageDiv);
@@ -283,11 +346,9 @@ $(function () {
   
   function display_model2_output() {
     let outputDiv = document.getElementById('model2-display');
-    outputDiv.innerHTML = gpt_5_1_item.completion;
-    
-    // Add the text to be rendered
-    // const textNode = document.createTextNode(text);
-    // outputDiv.appendChild(textNode);
+    const { text: protectedText, latexBlocks } = protectLatex(gpt_5_1_item.completion);
+    const markdownHtml = typeof marked !== 'undefined' ? marked.parse(protectedText) : protectedText;
+    outputDiv.innerHTML = restoreLatex(markdownHtml, latexBlocks);
     
     // Render the KaTeX
     try {
