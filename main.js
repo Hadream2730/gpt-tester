@@ -3,6 +3,7 @@ $(function () {
     var gpt_5_1_item = null;
     var chatHistory = []; // Store chat messages
     var currentSystemInstruction = '';
+    var currentConversationId = null; // Store conversation_id for stateful conversations
     $('#problem-number').val('1523');
 
     function displayAll() {
@@ -247,10 +248,37 @@ $(function () {
 
   function clearChat() {
     chatHistory = [];
+    currentConversationId = null; // Clear conversation_id when starting fresh
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = '<div class="chat-welcome"><p>👋 Start a conversation! Submit the problem first, then ask questions about the result.</p></div>';
     $('#chat-input').val('');
     $('#send-chat-button').prop('disabled', true);
+  }
+
+  function parseResponseContent(content) {
+    // Handle different response structures from the API
+    if (Array.isArray(content) && content.length > 0) {
+      // Check if it's the nested structure: [{content: [{text: "..."}]}]
+      if (content[0].content && Array.isArray(content[0].content) && content[0].content.length > 0) {
+        return content[0].content[0].text || content[0].content[0];
+      }
+      // Check if it's an array of strings
+      if (typeof content[0] === 'string') {
+        return content[0];
+      }
+      // Check if it's an array of objects with text property
+      if (content[0].text) {
+        return content[0].text;
+      }
+      // Fallback: stringify if we can't parse
+      return JSON.stringify(content);
+    }
+    // If content is a string directly
+    if (typeof content === 'string') {
+      return content;
+    }
+    // Fallback: stringify
+    return JSON.stringify(content);
   }
   
   function display_model2_output() {
@@ -307,27 +335,38 @@ $(function () {
         showLoadingMessage();
 
         try {
+            const requestBody = {
+                system: currentSystemInstruction,
+                messages: [
+                    { role: "user", content: gpt_4_1_item.problem }
+                ]
+            };
+            
+            // Don't send conversation_id for the first message (starting new conversation)
+            // The API will return a conversation_id that we'll use for subsequent messages
+
             const response = await fetch("https://gpt-test-backend.onrender.com/chat", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({
-                    system: currentSystemInstruction,
-                    messages: [
-                        { role: "user", content: gpt_4_1_item.problem }
-                    ]
-                })
+                body: JSON.stringify(requestBody)
             });
 
             const data = await response.json();
             removeLoadingMessage();
             
-            if (data.error) {
-                addChatMessage('assistant', `<p style="color: red;">Error: ${data.message || 'Unknown error occurred'}</p>`);
+            if (!response.ok || data.error || data.detail?.error) {
+                const errorMsg = data.detail?.message || data.message || data.detail?.detail || 'Unknown error occurred';
+                addChatMessage('assistant', `<p style="color: red;">Error: ${errorMsg}</p>`);
             } else {
-                let result = data.content[0].content[0].text;
+                let result = parseResponseContent(data.content);
                 addChatMessage('assistant', result);
+                
+                // Store conversation_id for subsequent messages
+                if (data.conversation_id) {
+                    currentConversationId = data.conversation_id;
+                }
             }
         } catch (error) {
             removeLoadingMessage();
@@ -374,11 +413,25 @@ $(function () {
         chatInput.val('');
         showLoadingMessage();
 
-        // Build messages array for API
-        const apiMessages = chatHistory.map(msg => ({
-            role: msg.role,
-            content: msg.content
-        }));
+        // Build request body
+        const requestBody = {
+            system: currentSystemInstruction,
+            messages: [
+                { role: "user", content: message }  // Only send the new message
+            ]
+        };
+        
+        // If we have a conversation_id, use it (API will maintain context)
+        // Otherwise, send full history (fallback for compatibility)
+        if (currentConversationId) {
+            requestBody.conversation_id = currentConversationId;
+        } else {
+            // Fallback: send full history if no conversation_id
+            requestBody.messages = chatHistory.map(msg => ({
+                role: msg.role,
+                content: msg.content
+            }));
+        }
 
         try {
             const response = await fetch("https://gpt-test-backend.onrender.com/chat", {
@@ -386,20 +439,23 @@ $(function () {
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({
-                    system: currentSystemInstruction,
-                    messages: apiMessages
-                })
+                body: JSON.stringify(requestBody)
             });
 
             const data = await response.json();
             removeLoadingMessage();
             
-            if (data.error) {
-                addChatMessage('assistant', `<p style="color: red;">Error: ${data.message || 'Unknown error occurred'}</p>`);
+            if (!response.ok || data.error || data.detail?.error) {
+                const errorMsg = data.detail?.message || data.message || data.detail?.detail || 'Unknown error occurred';
+                addChatMessage('assistant', `<p style="color: red;">Error: ${errorMsg}</p>`);
             } else {
-                let result = data.content[0].content[0].text;
+                let result = parseResponseContent(data.content);
                 addChatMessage('assistant', result);
+                
+                // Update conversation_id if provided (should be same or new one)
+                if (data.conversation_id) {
+                    currentConversationId = data.conversation_id;
+                }
             }
         } catch (error) {
             removeLoadingMessage();
