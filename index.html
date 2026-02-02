@@ -56,6 +56,56 @@
       font-size: 14px;
     }
 
+    .label-with-copy {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .label-with-copy label {
+      margin-bottom: 0;
+    }
+
+    .copy-btn {
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 32px;
+      height: 32px;
+    }
+
+    .copy-btn:hover {
+      background: var(--bg);
+      border-color: var(--btn);
+      color: var(--btn);
+      transform: translateY(-1px);
+    }
+
+    .copy-btn:active {
+      transform: translateY(0);
+    }
+
+    .copy-btn.copied {
+      background: #34c759;
+      border-color: #34c759;
+      color: white;
+    }
+
+    .copy-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
     .row {
       display: flex;
       align-items: center;
@@ -295,6 +345,56 @@
       margin-bottom: 0;
     }
 
+    .copy-btn-chat {
+      padding: 6px 8px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 28px;
+      align-self: flex-start;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+
+    .copy-btn-chat:hover {
+      background: var(--bg);
+      border-color: var(--btn);
+      color: var(--btn);
+      transform: translateY(-1px);
+    }
+
+    .copy-btn-chat:active {
+      transform: translateY(0);
+    }
+
+    .copy-btn-chat.copied {
+      background: #34c759;
+      border-color: #34c759;
+      color: white;
+    }
+
+    .copy-btn-chat svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .chat-message.user .copy-btn-chat {
+      order: -1;
+    }
+
+    .chat-message.assistant .copy-btn-chat {
+      order: 1;
+    }
+
     .chat-input-container {
       display: flex;
       gap: 8px;
@@ -397,19 +497,43 @@
 
     <!-- Problem -->
     <div class="section large">
-      <label>Problem:</label>
+      <div class="label-with-copy">
+        <label>Problem:</label>
+        <button class="copy-btn" data-copy-target="problem" title="Copy original text">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
       <div scrollable placeholder="Text Area" id="problem-display"></div>
     </div>
 
     <!-- Solution -->
     <div class="section large">
-      <label>Solution:</label>
+      <div class="label-with-copy">
+        <label>Solution:</label>
+        <button class="copy-btn" data-copy-target="solution" title="Copy original text">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
       <div placeholder="Text Area" id="solution-display"></div>
     </div>
 
     <!-- Answer -->
     <div class="section large">
-      <label>Answer:</label>
+      <div class="label-with-copy">
+        <label>Answer:</label>
+        <button class="copy-btn" data-copy-target="answer" title="Copy original text">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
       <div placeholder="Text Area" id="answer-display"></div>
     </div>
 

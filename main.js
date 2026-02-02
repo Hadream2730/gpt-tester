@@ -6,6 +6,13 @@ $(function () {
     var currentConversationId = null; // Store conversation_id for stateful conversations
     $('#problem-number').val('1523');
 
+    // Store original text before markdown/KaTeX processing
+    var originalTexts = {
+        problem: '',
+        solution: '',
+        answer: ''
+    };
+
     // Helper function to protect LaTeX before markdown processing
     function protectLatex(text) {
       if (!text) return { text: '', latexBlocks: [] };
@@ -143,6 +150,8 @@ $(function () {
   }
   function display_problem() {
     let outputDiv = document.getElementById('problem-display');
+    // Store original text before processing
+    originalTexts.problem = gpt_4_1_item.problem;
     const { text: protectedText, latexBlocks } = protectLatex(gpt_4_1_item.problem);
     const markdownHtml = typeof marked !== 'undefined' ? marked.parse(protectedText) : protectedText;
     outputDiv.innerHTML = restoreLatex(markdownHtml, latexBlocks);
@@ -172,6 +181,8 @@ $(function () {
   
   function display_solution() {
     let outputDiv = document.getElementById('solution-display');
+    // Store original text before processing
+    originalTexts.solution = gpt_4_1_item.solution;
     const { text: protectedText, latexBlocks } = protectLatex(gpt_4_1_item.solution);
     const markdownHtml = typeof marked !== 'undefined' ? marked.parse(protectedText) : protectedText;
     outputDiv.innerHTML = restoreLatex(markdownHtml, latexBlocks);
@@ -201,6 +212,8 @@ $(function () {
   
   function display_answer() {
     let outputDiv = document.getElementById('answer-display');
+    // Store original text before processing (without the $ wrapper for copying)
+    originalTexts.answer = gpt_4_1_item.answers;
     // Answer is already wrapped in $ delimiters, so protect it
     const answerText = "$" + gpt_4_1_item.answers + "$";
     const { text: protectedText, latexBlocks } = protectLatex(answerText);
@@ -243,6 +256,9 @@ $(function () {
     const messageDiv = document.createElement('div');
     messageDiv.className = `chat-message ${role}`;
     
+    // Store original content in data attribute for copying
+    messageDiv.setAttribute('data-original-content', content);
+    
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
     
@@ -251,7 +267,37 @@ $(function () {
     const markdownHtml = typeof marked !== 'undefined' ? marked.parse(protectedText) : protectedText;
     contentDiv.innerHTML = restoreLatex(markdownHtml, latexBlocks);
     
+    // Create copy button for this message
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'copy-btn-chat';
+    copyBtn.title = 'Copy original text';
+    copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+    
+    // Add click handler for this copy button
+    copyBtn.addEventListener('click', function() {
+      const originalText = messageDiv.getAttribute('data-original-content');
+      if (originalText) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(originalText).then(function() {
+            showCopyFeedback($(copyBtn));
+            downloadAsJson(originalText, 'chat-message');
+          }).catch(function() {
+            if (copyToClipboard(originalText)) {
+              showCopyFeedback($(copyBtn));
+              downloadAsJson(originalText, 'chat-message');
+            }
+          });
+        } else {
+          if (copyToClipboard(originalText)) {
+            showCopyFeedback($(copyBtn));
+            downloadAsJson(originalText, 'chat-message');
+          }
+        }
+      }
+    });
+    
     messageDiv.appendChild(contentDiv);
+    messageDiv.appendChild(copyBtn);
     chatMessages.appendChild(messageDiv);
     
     // Render KaTeX in the new message
@@ -313,7 +359,7 @@ $(function () {
     chatHistory = [];
     currentConversationId = null; // Clear conversation_id when starting fresh
     const chatMessages = document.getElementById('chat-messages');
-    chatMessages.innerHTML = '<div class="chat-welcome"><p>👋 Start a conversation! Submit the problem first, then ask questions about the result.</p></div>';
+    chatMessages.innerHTML = '<div class="chat-welcome"><p>👋 Start a conversation! Type a message below, or submit a problem above to chat about it.</p></div>';
     $('#chat-input').val('');
     $('#send-chat-button').prop('disabled', true);
   }
@@ -453,15 +499,14 @@ $(function () {
 
     $('#chat-input').on('input', function() {
         const hasText = $(this).val().trim().length > 0;
-        const hasHistory = chatHistory.length > 0;
-        $('#send-chat-button').prop('disabled', !hasText || !hasHistory);
+        $('#send-chat-button').prop('disabled', !hasText);
     });
 
     async function sendChatMessage() {
         const chatInput = $('#chat-input');
         const message = chatInput.val().trim();
         
-        if (!message || chatHistory.length === 0) {
+        if (!message) {
             return;
         }
 
@@ -474,20 +519,22 @@ $(function () {
         chatInput.val('');
         showLoadingMessage();
 
+        // System: use current (set by Submit) or fallback to textarea for standalone chat
+        const systemInstruction = currentSystemInstruction || $('#system-instruction').val() || '';
+
         // Build request body
         const requestBody = {
-            system: currentSystemInstruction,
+            system: systemInstruction,
             messages: [
-                { role: "user", content: message }  // Only send the new message
+                { role: "user", content: message }
             ]
         };
         
-        // If we have a conversation_id, use it (API will maintain context)
-        // Otherwise, send full history (fallback for compatibility)
+        // If we have a conversation_id (e.g. after Submit or previous messages), use it
         if (currentConversationId) {
             requestBody.conversation_id = currentConversationId;
         } else {
-            // Fallback: send full history if no conversation_id
+            // New conversation: send full history so API has context (or just this message)
             requestBody.messages = chatHistory.map(msg => ({
                 role: msg.role,
                 content: msg.content
@@ -531,4 +578,86 @@ $(function () {
     $('#clear-chat-button').click(function() {
         clearChat();
     });
+
+    // Copy functionality (fallback for older browsers)
+    function copyToClipboard(text) {
+        if (!text) {
+            return false;
+        }
+        
+        // Create a temporary textarea element
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-999999px';
+        textarea.style.top = '-999999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        
+        try {
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textarea);
+            return successful;
+        } catch (err) {
+            document.body.removeChild(textarea);
+            return false;
+        }
+    }
+
+    // Download copied text as a JSON file
+    function downloadAsJson(text, filenameBase) {
+        if (!text) return;
+        const payload = { text: text };
+        const jsonString = JSON.stringify(payload, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (filenameBase || 'copy') + '-' + Date.now() + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // Copy button event handlers
+    $('.copy-btn').click(function() {
+        const $button = $(this);
+        const target = $button.data('copy-target');
+        const originalText = originalTexts[target];
+        
+        if (originalText) {
+            // Use modern clipboard API if available
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(originalText).then(function() {
+                    showCopyFeedback($button);
+                    downloadAsJson(originalText, target);
+                }).catch(function() {
+                    // Fallback to execCommand
+                    if (copyToClipboard(originalText)) {
+                        showCopyFeedback($button);
+                        downloadAsJson(originalText, target);
+                    }
+                });
+            } else {
+                // Fallback to execCommand
+                if (copyToClipboard(originalText)) {
+                    showCopyFeedback($button);
+                    downloadAsJson(originalText, target);
+                }
+            }
+        }
+    });
+
+    function showCopyFeedback($button) {
+        const originalHtml = $button.html();
+        $button.addClass('copied');
+        $button.html('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>');
+        
+        setTimeout(function() {
+            $button.removeClass('copied');
+            $button.html(originalHtml);
+        }, 2000);
+    }
 });
