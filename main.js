@@ -442,11 +442,13 @@ $(function () {
         showLoadingMessage();
 
         try {
+            const modelName = ($('#model-name').val() || '').trim() || 'gpt-4.1-mini';
             const requestBody = {
                 system: currentSystemInstruction,
                 messages: [
                     { role: "user", content: gpt_4_1_item.problem }
-                ]
+                ],
+                model: modelName
             };
             
             // Don't send conversation_id for the first message (starting new conversation)
@@ -521,13 +523,15 @@ $(function () {
 
         // System: use current (set by Submit) or fallback to textarea for standalone chat
         const systemInstruction = currentSystemInstruction || $('#system-instruction').val() || '';
+        const modelName = ($('#model-name').val() || '').trim() || 'gpt-4.1-mini';
 
         // Build request body
         const requestBody = {
             system: systemInstruction,
             messages: [
                 { role: "user", content: message }
-            ]
+            ],
+            model: modelName
         };
         
         // If we have a conversation_id (e.g. after Submit or previous messages), use it

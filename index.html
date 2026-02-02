@@ -537,7 +537,7 @@
       <div placeholder="Text Area" id="answer-display"></div>
     </div>
 
-    <!-- System Instruction -->
+    <!-- Model & System Instruction -->
     <div class="section">
       <div class="section-header">
         <label>System Instruction</label>
@@ -545,6 +545,10 @@
           <span class="btn-text">Submit</span>
           <span class="btn-loader" style="display: none;">⏳</span>
         </button>
+      </div>
+      <div class="row" style="margin-bottom: 12px;">
+        <label for="model-name" style="margin-bottom: 0; min-width: 80px;">Model:</label>
+        <input type="text" id="model-name" placeholder="e.g. gpt-4.1-mini" value="gpt-4.1-mini" style="flex: 1; min-width: 160px;">
       </div>
       <textarea id="system-instruction" placeholder="Enter system instructions for the AI model..."></textarea>
     </div>
